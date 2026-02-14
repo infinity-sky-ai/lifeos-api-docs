@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: LifeOS API
-  version: 1.0.0
+  version: 1.1.0
   description: |
-    The LifeOS API provides programmatic access to your habit tracking data.
+    The LifeOS API provides programmatic access to your habit tracking and notes data.
 
     ## Authentication
     All requests require a Bearer token in the Authorization header.
@@ -14,8 +14,135 @@ info:
     ```
 
     ## Permissions
-    API keys have granular permissions per resource (habits, habit_entries).
+    API keys have granular permissions per resource (habits, habit_entries, notes).
     Each resource supports: read, create, update, delete.
+
+    ## Notes Content Format (BlockNote JSON)
+
+    Notes use the [BlockNote](https://www.blocknotejs.org/) editor format. Content is stored as a JSON array of block objects. Each block has a `type`, optional `props`, inline `content`, and optional `children`.
+
+    ### Block Structure
+    ```json
+    {
+      "id": "unique-block-id",
+      "type": "paragraph",
+      "props": { "textAlignment": "left" },
+      "content": [{ "type": "text", "text": "Hello world", "styles": {} }],
+      "children": []
+    }
+    ```
+
+    ### Available Block Types
+
+    | Type | Description | Key Props |
+    |------|-------------|-----------|
+    | `paragraph` | Standard text block | `textAlignment`, `backgroundColor`, `textColor` |
+    | `heading` | Heading (H1-H3) | `level` (1, 2, or 3), `textAlignment`, `backgroundColor`, `textColor` |
+    | `bulletListItem` | Bulleted list item | `textAlignment`, `backgroundColor`, `textColor` |
+    | `numberedListItem` | Numbered list item | `textAlignment`, `backgroundColor`, `textColor` |
+    | `checkListItem` | Checklist item | `checked` (boolean), `textAlignment`, `backgroundColor`, `textColor` |
+    | `codeBlock` | Code block | `language` |
+    | `image` | Image embed | `url`, `caption`, `width` |
+    | `table` | Table | `content` (2D array of cells) |
+    | `callout` | Highlighted info box (custom) | `icon` (emoji), `backgroundColor` (hex) |
+    | `divider` | Horizontal rule (custom) | _(none)_ |
+    | `toggle` | Collapsible section (custom) | _(none — content is inline)_ |
+    | `bookmark` | Link preview card (custom) | `url`, `title`, `description` |
+
+    ### Inline Content Format
+    Each content-bearing block has a `content` array of inline elements:
+
+    ```json
+    [
+      {
+        "type": "text",
+        "text": "Bold and colored",
+        "styles": {
+          "bold": true,
+          "textColor": "#3B82F6",
+          "backgroundColor": "#FEF3C7"
+        }
+      },
+      {
+        "type": "link",
+        "href": "https://example.com",
+        "content": [{ "type": "text", "text": "Click here", "styles": {} }]
+      }
+    ]
+    ```
+
+    ### Available Text Styles
+    | Style | Type | Description |
+    |-------|------|-------------|
+    | `bold` | boolean | Bold text |
+    | `italic` | boolean | Italic text |
+    | `underline` | boolean | Underlined text |
+    | `strikethrough` | boolean | Strikethrough text |
+    | `code` | boolean | Inline code |
+    | `textColor` | string | Text color (any CSS color, e.g. `"#3B82F6"`, `"red"`) |
+    | `backgroundColor` | string | Text highlight color (e.g. `"#FEF3C7"`) |
+
+    ### Nesting / Children
+    Blocks can have nested `children` blocks for indentation. List items commonly use children for sub-items:
+
+    ```json
+    {
+      "type": "bulletListItem",
+      "content": [{ "type": "text", "text": "Parent item", "styles": {} }],
+      "children": [
+        {
+          "type": "bulletListItem",
+          "content": [{ "type": "text", "text": "Sub-item", "styles": {} }],
+          "children": []
+        }
+      ]
+    }
+    ```
+
+    ### Full Content Example
+    ```json
+    [
+      {
+        "id": "1",
+        "type": "heading",
+        "props": { "level": 1, "textAlignment": "left" },
+        "content": [{ "type": "text", "text": "Project Notes", "styles": {} }],
+        "children": []
+      },
+      {
+        "id": "2",
+        "type": "paragraph",
+        "props": { "textAlignment": "left" },
+        "content": [
+          { "type": "text", "text": "This is ", "styles": {} },
+          { "type": "text", "text": "important", "styles": { "bold": true, "textColor": "#EF4444" } },
+          { "type": "text", "text": " information.", "styles": {} }
+        ],
+        "children": []
+      },
+      {
+        "id": "3",
+        "type": "callout",
+        "props": { "icon": "💡", "backgroundColor": "#EFF6FF" },
+        "content": [{ "type": "text", "text": "Pro tip: use callouts for emphasis", "styles": {} }],
+        "children": []
+      },
+      {
+        "id": "4",
+        "type": "checkListItem",
+        "props": { "checked": false },
+        "content": [{ "type": "text", "text": "Review the docs", "styles": {} }],
+        "children": []
+      },
+      {
+        "id": "5",
+        "type": "divider",
+        "props": {},
+        "content": [],
+        "children": []
+      }
+    ]
+    ```
 
 servers:
   - url: https://lifeos-ashy.vercel.app
@@ -118,7 +245,197 @@ components:
           type: string
           format: date-time
 
+    InlineText:
+      type: object
+      description: An inline text element within a block's content array
+      properties:
+        type:
+          type: string
+          enum: [text]
+        text:
+          type: string
+        styles:
+          type: object
+          description: Text formatting styles
+          properties:
+            bold:
+              type: boolean
+            italic:
+              type: boolean
+            underline:
+              type: boolean
+            strikethrough:
+              type: boolean
+            code:
+              type: boolean
+            textColor:
+              type: string
+              description: "CSS color value (e.g. '#3B82F6', 'red')"
+            backgroundColor:
+              type: string
+              description: "Highlight color (e.g. '#FEF3C7')"
+
+    InlineLink:
+      type: object
+      description: An inline link element
+      properties:
+        type:
+          type: string
+          enum: [link]
+        href:
+          type: string
+          format: uri
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/InlineText"
+
+    BlockContent:
+      description: An inline content element (text or link)
+      oneOf:
+        - $ref: "#/components/schemas/InlineText"
+        - $ref: "#/components/schemas/InlineLink"
+
+    Block:
+      type: object
+      description: A single content block in the BlockNote document
+      properties:
+        id:
+          type: string
+          description: Unique block identifier (auto-generated if omitted)
+        type:
+          type: string
+          enum:
+            - paragraph
+            - heading
+            - bulletListItem
+            - numberedListItem
+            - checkListItem
+            - codeBlock
+            - image
+            - table
+            - callout
+            - divider
+            - toggle
+            - bookmark
+        props:
+          type: object
+          description: Block-specific properties (varies by type)
+          properties:
+            textAlignment:
+              type: string
+              enum: [left, center, right]
+            backgroundColor:
+              type: string
+              description: "Block background color (default or hex)"
+            textColor:
+              type: string
+              description: "Block text color (default or hex)"
+            level:
+              type: integer
+              enum: [1, 2, 3]
+              description: "Heading level (heading blocks only)"
+            checked:
+              type: boolean
+              description: "Checkbox state (checkListItem only)"
+            language:
+              type: string
+              description: "Code language (codeBlock only)"
+            url:
+              type: string
+              description: "URL for image/bookmark blocks"
+            caption:
+              type: string
+              description: "Image caption (image blocks only)"
+            width:
+              type: integer
+              description: "Image width in pixels (image blocks only)"
+            icon:
+              type: string
+              description: "Emoji icon for callout blocks"
+            title:
+              type: string
+              description: "Title for bookmark blocks"
+            description:
+              type: string
+              description: "Description for bookmark blocks"
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlockContent"
+          description: Inline content (text, links) within the block
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/Block"
+          description: Nested child blocks (for indentation/sub-items)
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID of the parent note (null for root-level notes)
+        title:
+          type: string
+          description: "Note title (default: 'Untitled')"
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Block"
+          nullable: true
+          description: BlockNote JSON content (array of blocks)
+        icon:
+          type: string
+          nullable: true
+          description: "Emoji icon displayed next to the title (e.g. '📋', '🚀')"
+        cover_image_url:
+          type: string
+          nullable: true
+          description: URL or gradient identifier for the cover image
+        is_favorite:
+          type: boolean
+          description: Whether the note is starred/favorited
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Array of tag strings for organization
+        sort_order:
+          type: integer
+          description: Sort position among sibling notes
+        trashed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the note was moved to trash (null if not trashed)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NoteWithChildren:
+      allOf:
+        - $ref: "#/components/schemas/Note"
+        - type: object
+          properties:
+            children_count:
+              type: integer
+              description: Number of direct child (sub-page) notes
+
 paths:
+  # ── Habits ──────────────────────────────────────────────
   /api/v1/habits:
     get:
       tags: [Habits]
@@ -291,6 +608,7 @@ paths:
         "200":
           description: Archived or deleted
 
+  # ── Habit Entries ───────────────────────────────────────
   /api/v1/habit-entries:
     get:
       tags: [Habit Entries]
@@ -440,3 +758,543 @@ paths:
                 properties:
                   deleted:
                     type: boolean
+
+  # ── Notes ───────────────────────────────────────────────
+  /api/v1/notes:
+    get:
+      tags: [Notes]
+      summary: List notes
+      description: |
+        Returns notes belonging to the authenticated user. By default, returns non-trashed notes without content (for performance).
+
+        **Hierarchy**: Notes form a tree structure via `parent_id`. Use `parent_id=root` to get only root-level notes, or `parent_id={uuid}` to get children of a specific note.
+
+        **Search**: Use the `search` parameter for PostgreSQL full-text search across note titles and content.
+      parameters:
+        - name: parent_id
+          in: query
+          description: "Filter by parent. Use `root` or `null` for top-level notes, or a UUID for children of a specific note."
+          schema:
+            type: string
+        - name: is_favorite
+          in: query
+          description: Filter to favorited notes only
+          schema:
+            type: boolean
+        - name: tag
+          in: query
+          description: Filter by tag (exact match)
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Full-text search query (PostgreSQL websearch syntax)
+          schema:
+            type: string
+        - name: include_trashed
+          in: query
+          description: Include notes that are in the trash
+          schema:
+            type: boolean
+            default: false
+        - name: include_content
+          in: query
+          description: Include the full content JSON in the response (default false for performance)
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          description: Maximum number of notes to return
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: offset
+          in: query
+          description: Number of notes to skip (for pagination)
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+              example:
+                - id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  user_id: "11111111-2222-3333-4444-555555555555"
+                  parent_id: null
+                  title: "Project Ideas"
+                  icon: "💡"
+                  cover_image_url: null
+                  is_favorite: true
+                  tags: ["projects", "brainstorm"]
+                  sort_order: 0
+                  trashed_at: null
+                  created_at: "2025-06-01T10:00:00Z"
+                  updated_at: "2025-06-15T14:30:00Z"
+                - id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                  user_id: "11111111-2222-3333-4444-555555555555"
+                  parent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  title: "App Redesign"
+                  icon: "🎨"
+                  cover_image_url: null
+                  is_favorite: false
+                  tags: ["design"]
+                  sort_order: 0
+                  trashed_at: null
+                  created_at: "2025-06-02T09:00:00Z"
+                  updated_at: "2025-06-14T11:00:00Z"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags: [Notes]
+      summary: Create a note
+      description: |
+        Creates a new note. All fields except the auto-generated ones are optional.
+
+        **Content**: Pass BlockNote JSON in the `content` field. See the Content Format section at the top of this document for the full schema. If omitted, the note starts empty.
+
+        **Hierarchy**: Set `parent_id` to create a sub-page under an existing note.
+
+        **Sort order**: Automatically calculated if not provided (appended after last sibling).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: "Note title (default: 'Untitled')"
+                parent_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Parent note ID (null for root-level)
+                content:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Block"
+                  description: BlockNote JSON content
+                icon:
+                  type: string
+                  description: "Emoji icon (e.g. '📋')"
+                cover_image_url:
+                  type: string
+                  description: Cover image URL
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: Tags for organization
+                is_favorite:
+                  type: boolean
+                  description: Star this note
+                sort_order:
+                  type: integer
+                  description: Position among siblings (auto-calculated if omitted)
+            examples:
+              simple:
+                summary: Simple note
+                value:
+                  title: "Meeting Notes"
+                  icon: "📝"
+                  tags: ["meetings", "work"]
+              with_content:
+                summary: Note with rich content
+                value:
+                  title: "Weekly Review"
+                  icon: "📊"
+                  tags: ["weekly", "review"]
+                  content:
+                    - id: "1"
+                      type: "heading"
+                      props:
+                        level: 1
+                      content:
+                        - type: "text"
+                          text: "Weekly Review - Feb 14"
+                          styles: {}
+                      children: []
+                    - id: "2"
+                      type: "paragraph"
+                      props: {}
+                      content:
+                        - type: "text"
+                          text: "Key accomplishments this week:"
+                          styles:
+                            bold: true
+                      children: []
+                    - id: "3"
+                      type: "checkListItem"
+                      props:
+                        checked: true
+                      content:
+                        - type: "text"
+                          text: "Shipped the new API"
+                          styles: {}
+                      children: []
+                    - id: "4"
+                      type: "checkListItem"
+                      props:
+                        checked: false
+                      content:
+                        - type: "text"
+                          text: "Write documentation"
+                          styles: {}
+                      children: []
+                    - id: "5"
+                      type: "callout"
+                      props:
+                        icon: "💡"
+                        backgroundColor: "#EFF6FF"
+                      content:
+                        - type: "text"
+                          text: "Remember to update the stakeholders"
+                          styles: {}
+                      children: []
+              sub_page:
+                summary: Create a sub-page
+                value:
+                  title: "Sprint Retro"
+                  parent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  icon: "🔄"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Parent note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/notes/{id}:
+    get:
+      tags: [Notes]
+      summary: Get a note
+      description: |
+        Returns a single note with its full content and a `children_count` indicating how many direct sub-pages it has.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Note details with content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoteWithChildren"
+              example:
+                id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                user_id: "11111111-2222-3333-4444-555555555555"
+                parent_id: null
+                title: "Project Ideas"
+                icon: "💡"
+                cover_image_url: null
+                is_favorite: true
+                tags: ["projects", "brainstorm"]
+                sort_order: 0
+                trashed_at: null
+                created_at: "2025-06-01T10:00:00Z"
+                updated_at: "2025-06-15T14:30:00Z"
+                children_count: 3
+                content:
+                  - id: "b1"
+                    type: "heading"
+                    props:
+                      level: 1
+                    content:
+                      - type: "text"
+                        text: "Project Ideas"
+                        styles: {}
+                    children: []
+                  - id: "b2"
+                    type: "paragraph"
+                    props: {}
+                    content:
+                      - type: "text"
+                        text: "A collection of ideas for upcoming projects."
+                        styles: {}
+                    children: []
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Notes]
+      summary: Update a note
+      description: |
+        Updates one or more fields on a note. Only include the fields you want to change.
+
+        **Content replacement**: Passing `content` replaces the entire document. To update individual blocks, read the current content first, modify the block(s) you want, then send the full array back.
+
+        **Moving notes**: Set `parent_id` to move a note under a different parent (or `null` to move to root). The API validates against circular references automatically.
+
+        **Tags**: Send the full `tags` array to replace all tags. To add a tag, read the current tags, append, and send the updated array.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                content:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Block"
+                  description: Full BlockNote content (replaces existing)
+                icon:
+                  type: string
+                  nullable: true
+                cover_image_url:
+                  type: string
+                  nullable: true
+                is_favorite:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  nullable: true
+                parent_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Move to a new parent (null = root level)
+                sort_order:
+                  type: integer
+            examples:
+              update_title:
+                summary: Rename a note
+                value:
+                  title: "Updated Project Ideas"
+              update_content:
+                summary: Update content with colored text
+                value:
+                  content:
+                    - id: "1"
+                      type: "heading"
+                      props:
+                        level: 1
+                      content:
+                        - type: "text"
+                          text: "Status Report"
+                          styles:
+                            textColor: "#3B82F6"
+                      children: []
+                    - id: "2"
+                      type: "paragraph"
+                      props: {}
+                      content:
+                        - type: "text"
+                          text: "All systems "
+                          styles: {}
+                        - type: "text"
+                          text: "operational"
+                          styles:
+                            bold: true
+                            textColor: "#10B981"
+                      children: []
+              move_note:
+                summary: Move note under a new parent
+                value:
+                  parent_id: "c3d4e5f6-a7b8-9012-cdef-123456789012"
+              add_tags:
+                summary: Update tags
+                value:
+                  tags: ["important", "q1-2025", "engineering"]
+              favorite:
+                summary: Toggle favorite
+                value:
+                  is_favorite: true
+      responses:
+        "200":
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Validation error (e.g. circular reference, no valid fields)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Note or parent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Notes]
+      summary: Trash or permanently delete a note
+      description: |
+        By default, moves the note and all its descendants to the trash (soft delete via `trashed_at`).
+
+        Use `hard=true` to permanently delete the note and all descendants. **This cannot be undone.**
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hard
+          in: query
+          description: "Set to `true` to permanently delete instead of trashing"
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Trashed or deleted
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Note"
+                  - type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                      deleted_count:
+                        type: integer
+                        description: Number of notes deleted (includes descendants)
+              examples:
+                soft_delete:
+                  summary: Soft delete (trashed)
+                  value:
+                    id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    title: "Old Notes"
+                    trashed_at: "2025-06-20T12:00:00Z"
+                hard_delete:
+                  summary: Hard delete (permanent)
+                  value:
+                    deleted: true
+                    deleted_count: 4
+
+  /api/v1/notes/{id}/restore:
+    post:
+      tags: [Notes]
+      summary: Restore a note from trash
+      description: |
+        Restores a trashed note. If the note's original parent was also trashed or deleted, the note is moved to root level instead.
+
+        Requires `notes.update` permission.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Restored note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+              example:
+                id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                title: "Restored Note"
+                trashed_at: null
+                parent_id: null
+                updated_at: "2025-06-21T10:00:00Z"
+        "400":
+          description: Note is not in trash
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/notes/{id}/duplicate:
+    post:
+      tags: [Notes]
+      summary: Duplicate a note
+      description: |
+        Creates a shallow copy of the note with " (copy)" appended to the title. The duplicate is placed after the original in sort order and is not favorited.
+
+        Child notes are **not** duplicated (shallow copy only).
+
+        Requires `notes.create` permission.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: Duplicated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+              example:
+                id: "d4e5f6a7-b8c9-0123-def0-123456789abc"
+                title: "Project Ideas (copy)"
+                icon: "💡"
+                parent_id: null
+                is_favorite: false
+                created_at: "2025-06-21T10:05:00Z"
+        "404":
+          description: Note not found or is trashed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
