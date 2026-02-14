@@ -18,6 +18,8 @@ info:
     Each resource supports: read, create, update, delete.
 
 servers:
+  - url: https://lifeos-ashy.vercel.app
+    description: Production
   - url: http://localhost:3000
     description: Local development
 
